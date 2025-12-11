@@ -1,132 +1,139 @@
 import random
-import numpy as np
 
-# Параметры системы
-n = 3  # размерность системы
-N = 1000  # длина цепи Маркова
-m = 10000  # количество реализаций цепи
+def main():
+    print("Решение примера из практикума (2x2)")
+    print("Система: x = -0.1x + 0.8y + 0.1")
+    print("         y =  0.4x - 0.1y - 0.2")
+    
+    # 1. ПАРАМЕТРЫ СИСТЕМЫ (из раздела "Решение" на скриншоте)
+    # -----------------------------------------------
+    n = 3
+    
+    # Матрица перехода (обозначена 'a' в C++ коде)
+    # x = a00*x + a01*y + f0
+    # y = a10*x + a11*y + f1
+    # a = [
+    #     [0.75,  0.15, 0.1],  # Коэффициенты для x: -0.1 и 0.8
+    #     [-0.15, 0.9, 0.35],   # Коэффициенты для y:  0.4 и -0.1
+    #     [0.25, -0.05, 0.5]
+    # ]
+    
+    # # Вектор свободных членов (обозначен 'f' в C++ коде)
+    # f = [0.5, 2.5, 4.0]
+    a = [
+        [-0.1,  0.8, 0],  # Коэффициенты для x: -0.1 и 0.8
+        [ 0.4, -0.1, 0],   # Коэффициенты для y:  0.4 и -0.1
+        [0, 0, 0]
+    ]
+    
+    # Вектор свободных членов (обозначен 'f' в C++ коде)
+    f = [0.1, -0.2, 0]
+    
+    # 2. НАСТРОЙКА ВЕРОЯТНОСТЕЙ
+    # -----------------------------------------------
+    # В примере практикума используются вероятности 0.5 (равномерные)
+    pi = [0.33, 0.33, 0.33]       # Начальные вероятности
+    p = [                 # Матрица переходных вероятностей
+        [0.33, 0.33, 0.33],
+        [0.33, 0.33, 0.33],
+        [0.33, 0.33, 0.33]
+    ]
+    
+    # Вектор h (будем менять его, чтобы найти сначала x, потом y)
+    h = [0.0] * n 
 
-# Матрица A и вектор f для варианта 13
-A = np.array([[0.75, 0.15, 0.1],
-              [-0.15, 0.9, 0.35],
-              [0.25, -0.05, 0.5]], dtype=float)
+    # ПАРАМЕТРЫ МОДЕЛИРОВАНИЯ
+    N = 1000      # Длина одной цепи (глубина)
+    m = 10000     # Количество цепей (итераций)
+    
+    # Массивы
+    chain_i = [0] * (N + 1)
+    Q = [0.0] * (N + 1)
+    ksi = [0.0] * m
+    
+    # Хранение результатов
+    results = []
 
-f = np.array([0.5, 2.5, 4], dtype=float)
-
-# Вектор h (единичный вектор для оценки x_i, здесь для x0)
-h = np.array([1.0, 0.0, 0.0], dtype=float)
-
-# Начальное распределение цепи Маркова (равномерное)
-pi = np.array([1/3, 1/3, 1/3], dtype=float)
-
-# Матрица переходных вероятностей (равномерная)
-P = np.array([[1/3, 1/3, 1/3],
-              [1/3, 1/3, 1/3],
-              [1/3, 1/3, 1/3]], dtype=float)
-
-# Инициализация генератора случайных чисел
-random.seed()
-
-# Моделирование m цепей Маркова длины N
-ksi = np.zeros(m, dtype=float)
-
-for j in range(m):
-    # Начальное состояние цепи
-    alpha = random.random()
-    if alpha < pi[0]:
-        i_prev = 0
-    elif alpha < pi[0] + pi[1]:
-        i_prev = 1
-    else:
-        i_prev = 2
-
-    # Вычисление начального веса
-    if pi[i_prev] > 0:
-        Q = h[i_prev] / pi[i_prev]
-    else:
-        Q = 0.0
-
-    # Накопитель для оценки
-    ksi_j = Q * f[i_prev]
-
-    # Проход по цепи Маркова
-    for step in range(1, N + 1):
-        # Следующее состояние
-        alpha = random.random()
-        if alpha < P[i_prev, 0]:
-            i_curr = 0
-        elif alpha < P[i_prev, 0] + P[i_prev, 1]:
-            i_curr = 1
-        else:
-            i_curr = 2
-
-        # Обновление веса
-        if P[i_prev, i_curr] > 0:
-            Q *= A[i_prev, i_curr] / P[i_prev, i_curr]
-        else:
-            Q = 0.0
-
-        # Добавление вклада текущего состояния
-        ksi_j += Q * f[i_curr]
-
-        # Обновление предыдущего состояния
-        i_prev = i_curr
-
-    ksi[j] = ksi_j
-
-# Оценка решения (для x0)
-x0_estimate = np.mean(ksi)
-print(f"Оценка для x0: {x0_estimate}")
-
-# Для x1 и x2 нужно повторить с h = [0,1,0] и [0,0,1]
-def estimate_component(h_vector):
-    ksi = np.zeros(m, dtype=float)
-    for j in range(m):
-        alpha = random.random()
-        if alpha < pi[0]:
-            i_prev = 0
-        elif alpha < pi[0] + pi[1]:
-            i_prev = 1
-        else:
-            i_prev = 2
-
-        if pi[i_prev] > 0:
-            Q = h_vector[i_prev] / pi[i_prev]
-        else:
-            Q = 0.0
-
-        ksi_j = Q * f[i_prev]
-
-        for step in range(1, N + 1):
+    # 3. ОСНОВНОЙ АЛГОРИТМ (один в один с C++)
+    # -----------------------------------------------
+    random.seed()
+    # Цикл по переменным: сначала ищем x (индекс 0), потом y (индекс 1)
+    for target_var in range(n):
+        
+        # Настраиваем h: (1, 0) для x, (0, 1) для y
+        for k in range(n):
+            h[k] = 1.0 if k == target_var else 0.0
+            
+        # Обнуляем ksi
+        for j in range(m):
+            ksi[j] = 0.0
+            
+        # Запускаем m цепей
+        for j in range(m):
+            
+            # --- Выбор начального состояния ---
             alpha = random.random()
-            if alpha < P[i_prev, 0]:
-                i_curr = 0
-            elif alpha < P[i_prev, 0] + P[i_prev, 1]:
-                i_curr = 1
+            if alpha < pi[0]:
+                chain_i[0] = 0
+            elif pi[0]<=alpha<(pi[0] + pi[1]):
+                chain_i[0] = 1
             else:
-                i_curr = 2
-
-            if P[i_prev, i_curr] > 0:
-                Q *= A[i_prev, i_curr] / P[i_prev, i_curr]
+                chain_i[0] = 2 
+                
+            # --- Генерация всей траектории ---
+            for k in range(1, N + 1):
+                alpha = random.random()
+                if alpha < pi[0]:
+                    chain_i[k] = 0
+                elif pi[0]<=alpha<(pi[0] + pi[1]):
+                    chain_i[k] = 1
+                else:
+                    chain_i[k] = 2 
+            
+            # --- Вычисление весов Q ---
+            # Q0
+            if pi[chain_i[0]] > 0:
+                Q[0] = h[chain_i[0]] / pi[chain_i[0]]
             else:
-                Q = 0.0
+                Q[0] = 0.0
+                
+            # Qk
+            for k in range(1, N + 1):
+                prev = chain_i[k-1]
+                curr = chain_i[k]
+                
+                if p[prev][curr] > 0:
+                    # Q[k] = Q[k-1] * a[prev][curr] / p[prev][curr]
+                    Q[k] = Q[k-1] * a[prev][curr] / p[prev][curr]
+                else:
+                    Q[k] = 0.0
+            
+            # --- Накопление суммы ksi ---
+            for k in range(0, N + 1):
+                idx = chain_i[k]
+                ksi[j] = ksi[j] + Q[k] * f[idx]
+        
+        # Усреднение
+        x_val = sum(ksi) / m
+        results.append(x_val)
 
-            ksi_j += Q * f[i_curr]
-            i_prev = i_curr
+    # 4. ВЫВОД
+    print("-" * 30)
+    print(f"Результат X: {results[0]:.5f}")
+    print(f"Результат Y: {results[1]:.5f}")
+    print(f"Результат z: {results[2]:.5f}")
+    
+    # Проверка "в лоб" подстановкой в систему из Решения:
+    # x = -0.1*x + 0.8*y + 0.1
+    # y =  0.4*x - 0.1*y - 0.2
+    # Это система: 
+    # 1.1x - 0.8y = 0.1
+    # -0.4x + 1.1y = -0.2
+    # Ее точное решение: x ≈ -0.056, y ≈ -0.202
+    print("-" * 30)
+    print("(Справочно) Ожидаемые значения для этой матрицы:")
+    print("X ≈ -0.056")
+    print("Y ≈ -0.202")
 
-        ksi[j] = ksi_j
-    return np.mean(ksi)
-
-# Оценки для x1 и x2
-x1_estimate = estimate_component(np.array([0.0, 1.0, 0.0]))
-x2_estimate = estimate_component(np.array([0.0, 0.0, 1.0]))
-
-print(f"Оценка для x1: {x1_estimate}")
-print(f"Оценка для x2: {x2_estimate}")
-
-# Сравнение с точным решением через numpy
-exact_solution = np.linalg.solve(A, f)
-print(f"Точное решение (numpy): {exact_solution}")
-print(f"Ошибки: |x0 - {exact_solution[0]}| = {abs(x0_estimate - exact_solution[0])}")
-print(f"        |x1 - {exact_solution[1]}| = {abs(x1_estimate - exact_solution[1])}")
-print(f"        |x2 - {exact_solution[2]}| = {abs(x2_estimate - exact_solution[2])}")
+if __name__ == "__main__":
+    main()
